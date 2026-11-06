@@ -27,22 +27,84 @@ class FlaskAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.get_json(), {"error": "Employee not found"})
 
-    def test_echo_endpoint_accepts_json(self):
-        payload = {"name": "Ada", "role": "developer"}
+    def test_post_employee_creates_employee(self):
+        payload = {
+            "name": "Ada Lovelace",
+            "email": "ada@example.com",
+            "department": "Engineering",
+        }
 
-        response = self.client.post("/api/echo", json=payload)
+        response = self.client.post("/api/employees", json=payload)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"received": payload})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.get_json(),
+            {"id": 1, **payload},
+        )
+        self.assertEqual(response.headers["Location"], "/api/employees/1")
 
-    def test_echo_endpoint_rejects_non_json(self):
-        response = self.client.post("/api/echo", data="not json")
+    def test_post_employee_rejects_non_json(self):
+        response = self.client.post("/api/employees", data="not json")
 
         self.assertEqual(response.status_code, 415)
         self.assertEqual(
             response.get_json(),
             {"error": "Content-Type must be application/json"},
         )
+
+    def test_post_employee_rejects_invalid_json(self):
+        response = self.client.post(
+            "/api/employees",
+            data="{invalid json",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Request body must be valid JSON"},
+        )
+
+    def test_post_employee_requires_all_fields(self):
+        response = self.client.post(
+            "/api/employees",
+            json={"name": "Ada Lovelace", "email": "ada@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "name, email, and department are required non-empty strings"},
+        )
+
+    def test_created_employee_can_be_retrieved(self):
+        create_response = self.client.post(
+            "/api/employees",
+            json={
+                "name": "Ada Lovelace",
+                "email": "ada@example.com",
+                "department": "Engineering",
+            },
+        )
+        employee_id = create_response.get_json()["id"]
+
+        response = self.client.get(f"/api/employees/{employee_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), create_response.get_json())
+
+    def test_created_employee_appears_in_employee_list(self):
+        payload = {
+            "name": "Ada Lovelace",
+            "email": "ada@example.com",
+            "department": "Engineering",
+        }
+        created = self.client.post("/api/employees", json=payload).get_json()
+
+        response = self.client.get("/api/employees")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), [created])
 
 
 if __name__ == "__main__":
